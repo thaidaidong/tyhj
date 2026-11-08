@@ -1,0 +1,52 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Bluetooth &amp; Wi-Fi</title>
+<style>
+:root{--bg:#f5f6f8;--c:#fff;--t:#1d2330;--m:#667085;--a:#2563eb;--b:#e3e6ec}
+@media(prefers-color-scheme:dark){:root{--bg:#12151c;--c:#1b2029;--t:#e8ebf2;--m:#9aa3b5;--a:#5b8cff;--b:#2c3340}}
+body{margin:0;font:16px system-ui,sans-serif;background:var(--bg);color:var(--t)}
+main{max-width:620px;margin:auto;padding:12px}
+.c{background:var(--c);border:1px solid var(--b);border-radius:14px;padding:14px;margin-bottom:12px}
+h3{margin:0 0 10px;font-size:15px;color:var(--m)}
+button{padding:10px 14px;border-radius:10px;border:0;background:var(--a);color:#fff;font:inherit;margin:2px}
+button.g{background:none;color:var(--t);border:1px solid var(--b)}button:disabled{opacity:.5}
+.d{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--b)}
+.m{color:var(--m);font-size:14px}
+#toast{position:fixed;left:12px;right:12px;bottom:12px;padding:12px;border-radius:12px;background:var(--t);color:var(--bg);display:none}
+</style></head><body><main>
+<div class="c"><h3>Bluetooth</h3><div id="bs" class="m">...</div>
+<button class="g" onclick="act('bt/power',{on:true})">Bật</button><button class="g" onclick="act('bt/power',{on:false})">Tắt</button>
+<button id="bscan" onclick="btScan(this)">Quét thiết bị</button><div id="bl"></div></div>
+<div class="c"><h3>Wi-Fi</h3><div id="ws" class="m">...</div>
+<p class="m">Tắt/đổi Wi-Fi sẽ mất kết nối nếu bạn đang truy cập qua Wi-Fi của máy này.</p>
+<button class="g" onclick="act('wifi/power',{on:true})">Bật</button><button class="g" onclick="act('wifi/power',{on:false})">Tắt</button>
+<button id="wscan" onclick="wScan(this)">Quét mạng</button><div id="wl"></div></div>
+<div class="c"><h3>Mở cài đặt trên máy</h3>
+<button class="g" onclick="act('open',{target:'bt'})">Bluetooth</button>
+<button class="g" onclick="act('open',{target:'wifi'})">Wi-Fi</button>
+<button class="g" onclick="act('open',{target:'hotspot'})">Điểm phát sóng</button></div>
+</main><div id="toast"></div>
+<script>
+const $=i=>document.getElementById(i);let tk=sessionStorage.tk||'';
+const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>e.style.display='none',4000)}
+async function api(p,b){
+  if(!tk){tk=prompt('Nhập token (xem trên màn hình app):')||'';sessionStorage.tk=tk}
+  const r=await fetch('/api/'+p,{method:b?'POST':'GET',headers:{'X-Token':tk},body:b?JSON.stringify(b):undefined});
+  if(r.status==401){sessionStorage.removeItem('tk');tk='';throw Error('Sai token')}
+  const j=await r.json();if(!j.ok)throw Error(j.error);return j}
+async function run(btn,label,f){const o=btn&&btn.textContent;if(btn){btn.disabled=true;btn.textContent=label}
+  try{await f()}catch(e){toast('Lỗi: '+e.message)}finally{if(btn){btn.disabled=false;btn.textContent=o}}}
+async function act(p,b){await run(null,'',async()=>{await api(p,b);toast('Xong');status()})}
+async function status(){try{const s=await api('status');
+  $('bs').textContent='Bluetooth '+(s.bt.on?'bật':'tắt')+(s.bt.bonded.length?' · đã ghép: '+s.bt.bonded.map(d=>d.name||d.mac).join(', '):'');
+  $('ws').textContent='Wi-Fi '+(s.wifi.on?'bật':'tắt')+(s.wifi.ssid?' · '+s.wifi.ssid:'')+(s.wifi.ip?' · '+s.wifi.ip:'')}catch(e){}}
+async function btScan(b){await run(b,'Đang quét…',async()=>{const r=await api('bt/scan',{});
+  $('bl').innerHTML=r.devices.length?r.devices.map(d=>`<div class="d"><span>${esc(d.name)}<br><small class="m">${esc(d.mac)}</small></span>${d.bonded?'<span class="m">Đã ghép</span>':`<button data-m="${esc(d.mac)}" onclick="pair(this)">Ghép nối</button>`}</div>`).join(''):'<p class="m">Không thấy thiết bị. Bật chế độ ghép đôi trên thiết bị rồi quét lại.</p>'})}
+async function pair(b){const pin=prompt('Mã PIN (bỏ trống nếu không cần):','')||'';
+  await run(b,'Đang ghép…',async()=>{await api('bt/pair',{mac:b.dataset.m,pin});toast('Đã ghép nối');status()})}
+async function wScan(b){await run(b,'Đang quét…',async()=>{const r=await api('wifi/scan',{});
+  $('wl').innerHTML=r.networks.map(n=>`<div class="d"><span>${esc(n.ssid)} <small class="m">${n.secured?'🔒':''} ${n.level} dBm</small></span><button data-s="${esc(n.ssid)}" data-p="${n.secured}" onclick="wc(this)">Kết nối</button></div>`).join('')||'<p class="m">Không thấy mạng nào.</p>'})}
+async function wc(b){const pw=b.dataset.p=='true'?(prompt('Mật khẩu Wi-Fi (bỏ trống nếu đã lưu):','')||''):'';
+  await run(b,'Đang kết nối…',async()=>{const r=await api('wifi/connect',{ssid:b.dataset.s,password:pw});toast('Hiện tại: '+(r.wifi.ssid||'chưa kết nối'));status()})}
+status();setInterval(()=>{if(!document.hidden)status()},15000);
+</script></body></html>
