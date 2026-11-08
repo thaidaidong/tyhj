@@ -124,6 +124,7 @@ class Api(private val ctx: Context, private val token: String, port: Int) : Nano
         }
         ctx.registerReceiver(r, IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST).apply { priority = 999 })
         try {
+            AutoPairService.arm(d.name ?: d.address)
             d.createBond()
             var seen = false
             for (n in 0 until 90) {
@@ -134,7 +135,7 @@ class Api(private val ctx: Context, private val token: String, port: Int) : Nano
                     else -> if (seen) break
                 }
             }
-        } finally { ctx.unregisterReceiver(r) }
+        } finally { AutoPairService.disarm(); ctx.unregisterReceiver(r) }
         throw Exception("Chưa ghép được. Nếu máy hiện hộp thoại xác nhận mã, hãy bấm 'Ghép nối' trên điện thoại.")
     }
 
